@@ -1,0 +1,53 @@
+name: Deploy MainGame to GitHub Pages
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: GitHub release tag containing main-game-web.zip
+        required: true
+        type: string
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Download the Unity Web export
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: gh release download --pattern main-game-web.zip -- "$RELEASE_TAG"
+
+      - name: Unpack the site
+        run: |
+          unzip -q main-game-web.zip -d site
+          test -s site/index.html
+          compgen -G 'site/Build/*.loader.js' > /dev/null
+          compgen -G 'site/Build/*.wasm.unityweb' > /dev/null
+          compgen -G 'site/Build/*.data.unityweb' > /dev/null
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+
+  deploy:
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
